@@ -263,23 +263,38 @@ change PAPER_TRADING from 'true' to 'false'."
 
 ## STEP 6 — Tax accounting setup
 
-Tell the user: "Every trade your bot places is automatically recorded in a file called
-`trades.csv`. You don't need to do anything — it writes itself every time a trade executes.
+Tell the user: "Every trade your bot places is automatically recorded in a spreadsheet
+called `trades.csv`. It was created the moment you ran the bot for the first time —
+open it now and you'll already see it's there waiting for you.
 
 Here's what it records for each trade:
 - Date and time
 - Exchange, symbol, side (buy/sell)
 - Quantity, price, total value
-- Estimated fee and net amount
+- Estimated fee (0.1%) and net amount
 - Order ID, paper vs live mode
+- Notes (including which safety check conditions failed if a trade was blocked)
 
 At tax time, open the file and hand it to your accountant. Or import it directly into
-your accounting software. Nothing to reconstruct.
+Google Sheets, Excel, or your accounting software. Nothing to reconstruct — it's all there."
 
-The file doesn't exist yet because you haven't made any trades. As soon as the first
-trade executes — paper or live — it will appear here automatically."
+Show them the exact path (it will have been printed to the terminal at startup):
 
-Show them the path: `./trades.csv` will appear in the project directory.
+```
+📄 Trade log: /path/to/claude-tradingview-mcp-trading/trades.csv
+```
+
+Tell them: "Open it right now in Google Sheets or Excel. You'll notice there's already
+a little note in there from us. 😄
+
+If you'd prefer the file in a different location — your Desktop, Documents, wherever —
+just tell Claude: 'Move my trades.csv to ~/Desktop' and it'll handle it.
+
+To get a running tax summary any time, run:
+```bash
+node bot.js --tax-summary
+```
+This prints your total trades, total volume, and estimated fees paid to date."
 
 ---
 
