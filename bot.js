@@ -41,13 +41,28 @@ function checkOnboarding() {
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
+// ─── Load settings from dashboard URL if available ───────────────────────────
+async function loadRemoteSettings() {
+  const url = process.env.DASHBOARD_URL;
+  if (!url) return {};
+  try {
+    const r = await fetch(`${url}/api/public-settings`);
+    if (!r.ok) return {};
+    const s = await r.json();
+    console.log(`📡 Settings loaded from dashboard: ${s.symbols.join(", ")}`);
+    return s;
+  } catch (_) { return {}; }
+}
+
+const _remoteSettings = await loadRemoteSettings();
+
 const CONFIG = {
-  symbols: (process.env.SYMBOLS || process.env.SYMBOL || "HYPEUSDT").split(",").map(s => s.trim()).filter(Boolean),
-  timeframe: process.env.TIMEFRAME || "1H",
-  portfolioValue: parseFloat(process.env.PORTFOLIO_VALUE_USD || "1000"),
-  maxTradeSizeUSD: parseFloat(process.env.MAX_TRADE_SIZE_USD || "100"),
-  maxTradesPerDay: parseInt(process.env.MAX_TRADES_PER_DAY || "3"),
-  paperTrading: process.env.PAPER_TRADING !== "false",
+  symbols: (_remoteSettings.symbols || (process.env.SYMBOLS || process.env.SYMBOL || "HYPEUSDT").split(",").map(s => s.trim()).filter(Boolean)),
+  timeframe: _remoteSettings.timeframe || process.env.TIMEFRAME || "1H",
+  portfolioValue: parseFloat(_remoteSettings.portfolioValue || process.env.PORTFOLIO_VALUE_USD || "1000"),
+  maxTradeSizeUSD: parseFloat(_remoteSettings.maxTradeSize || process.env.MAX_TRADE_SIZE_USD || "100"),
+  maxTradesPerDay: parseInt(_remoteSettings.maxTradesPerDay || process.env.MAX_TRADES_PER_DAY || "3"),
+  paperTrading: _remoteSettings.paperTrading !== undefined ? _remoteSettings.paperTrading : process.env.PAPER_TRADING !== "false",
   tradeMode: process.env.TRADE_MODE || "spot",
   bitget: {
     apiKey: process.env.BITGET_API_KEY,

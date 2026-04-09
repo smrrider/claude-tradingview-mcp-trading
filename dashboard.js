@@ -40,6 +40,20 @@ function writeEnv(updates) {
   fs.writeFileSync(ENV_PATH, content);
 }
 
+// ─── API: public settings endpoint (read by bot on Railway) ──────────────────
+app.get("/api/public-settings", (req, res) => {
+  const env = fs.existsSync(ENV_PATH) ? readEnv() : {};
+  const symbolsRaw = env.SYMBOLS || process.env.SYMBOLS || env.SYMBOL || process.env.SYMBOL || "HYPEUSDT";
+  res.json({
+    symbols: symbolsRaw.split(",").map(s => s.trim()).filter(Boolean),
+    timeframe: env.TIMEFRAME || process.env.TIMEFRAME || "1H",
+    portfolioValue: env.PORTFOLIO_VALUE_USD || process.env.PORTFOLIO_VALUE_USD || "500",
+    maxTradeSize: env.MAX_TRADE_SIZE_USD || process.env.MAX_TRADE_SIZE_USD || "100",
+    maxTradesPerDay: env.MAX_TRADES_PER_DAY || process.env.MAX_TRADES_PER_DAY || "1000",
+    paperTrading: (env.PAPER_TRADING || process.env.PAPER_TRADING) !== "false",
+  });
+});
+
 // ─── API: get current settings ───────────────────────────────────────────────
 app.get("/api/settings", (req, res) => {
   // On Railway, .env doesn't exist — read from injected env vars directly
