@@ -1,6 +1,6 @@
 {
   "watchlist": ["PIONEX:HYPEUSDT.P"],
-  "default_timeframe": "240",
+  "default_timeframe": "1H",
 
   "strategy": {
     "name": "Market Sentinel — 5-Layer Institutional Entry Framework",
