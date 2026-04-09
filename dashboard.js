@@ -56,18 +56,67 @@ app.get("/api/settings", (req, res) => {
   });
 });
 
+// ─── Railway API — update bot service variables ───────────────────────────────
+async function updateRailwayVars(updates) {
+  const token = process.env.RAILWAY_TOKEN;
+  const serviceId = process.env.RAILWAY_BOT_SERVICE_ID || "23bfdd71-ffc4-423a-af14-eb1e42234c41";
+  const projectId = process.env.RAILWAY_PROJECT_ID || "28e67e75-d6d1-4501-8e29-d6ec68969699";
+  if (!token) return { success: false, reason: "No RAILWAY_TOKEN set" };
+
+  // Build variables upsert array
+  const variables = Object.entries(updates).map(([name, value]) => ({ name, value }));
+
+  const query = `
+    mutation variableCollectionUpsert($input: VariableCollectionUpsertInput!) {
+      variableCollectionUpsert(input: $input)
+    }
+  `;
+  const input = {
+    projectId,
+    serviceId,
+    environmentId: process.env.RAILWAY_BOT_ENVIRONMENT_ID || "",
+    variables: Object.fromEntries(Object.entries(updates)),
+  };
+
+  try {
+    const r = await fetch("https://backboard.railway.app/graphql/v2", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables: { input } }),
+    });
+    const json = await r.json();
+    if (json.errors) return { success: false, reason: json.errors[0].message };
+    return { success: true };
+  } catch (e) {
+    return { success: false, reason: e.message };
+  }
+}
+
 // ─── API: save settings ──────────────────────────────────────────────────────
-app.post("/api/settings", (req, res) => {
+app.post("/api/settings", async (req, res) => {
   const { symbols, timeframe, portfolioValue, maxTradeSize, maxTradesPerDay, paperTrading } = req.body;
-  writeEnv({
+  const updates = {
     SYMBOLS: Array.isArray(symbols) ? symbols.join(",") : symbols,
     TIMEFRAME: timeframe,
     PORTFOLIO_VALUE_USD: portfolioValue,
     MAX_TRADE_SIZE_USD: maxTradeSize,
     MAX_TRADES_PER_DAY: maxTradesPerDay,
     PAPER_TRADING: paperTrading ? "true" : "false",
+  };
+
+  // Save to local .env
+  if (fs.existsSync(ENV_PATH)) writeEnv(updates);
+
+  // Push to Railway bot service if token is available
+  const railwayResult = await updateRailwayVars(updates);
+
+  res.json({
+    success: true,
+    railway: railwayResult,
   });
-  res.json({ success: true });
 });
 
 // ─── Webhook — receive results from Railway bot ──────────────────────────────
@@ -302,10 +351,18 @@ async function saveSettings() {
     })
   });
   const s = document.getElementById('saveStatus');
-  if ((await r.json()).success) {
-    s.textContent = '✓ Settings saved';
-    btn.textContent = 'Save Settings';
-    setTimeout(() => s.textContent = '', 3000);
+  const data = await r.json();
+  btn.textContent = 'Save Settings';
+  if (data.success) {
+    if (data.railway?.success) {
+      s.textContent = '✓ Saved locally + synced to Railway';
+    } else if (data.railway?.reason) {
+      s.textContent = '✓ Saved locally — Railway sync failed: ' + data.railway.reason;
+      s.className = 'status error';
+    } else {
+      s.textContent = '✓ Settings saved';
+    }
+    setTimeout(() => { s.textContent = ''; s.className = 'status'; }, 4000);
   }
 }
 
