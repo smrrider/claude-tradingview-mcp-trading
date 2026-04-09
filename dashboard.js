@@ -40,49 +40,57 @@ function writeEnv(updates) {
   fs.writeFileSync(ENV_PATH, content);
 }
 
-// ─── API: public settings endpoint (read by bot on Railway) ──────────────────
-app.get("/api/public-settings", (req, res) => {
+// ─── In-memory settings (source of truth for spawned bot + public-settings) ──
+function getBaseSettings() {
   const env = fs.existsSync(ENV_PATH) ? readEnv() : {};
   const symbolsRaw = env.SYMBOLS || process.env.SYMBOLS || env.SYMBOL || process.env.SYMBOL || "HYPEUSDT";
-  res.json({
+  return {
     symbols: symbolsRaw.split(",").map(s => s.trim()).filter(Boolean),
     timeframe: env.TIMEFRAME || process.env.TIMEFRAME || "1H",
     portfolioValue: env.PORTFOLIO_VALUE_USD || process.env.PORTFOLIO_VALUE_USD || "500",
     maxTradeSize: env.MAX_TRADE_SIZE_USD || process.env.MAX_TRADE_SIZE_USD || "100",
     maxTradesPerDay: env.MAX_TRADES_PER_DAY || process.env.MAX_TRADES_PER_DAY || "1000",
     paperTrading: (env.PAPER_TRADING || process.env.PAPER_TRADING) !== "false",
-  });
+  };
+}
+
+let memSettings = getBaseSettings();
+
+// ─── API: public settings endpoint (read by bot on Railway) ──────────────────
+app.get("/api/public-settings", (req, res) => {
+  res.json(memSettings);
 });
 
 // ─── API: get current settings ───────────────────────────────────────────────
 app.get("/api/settings", (req, res) => {
-  // On Railway, .env doesn't exist — read from injected env vars directly
-  const env = fs.existsSync(ENV_PATH) ? readEnv() : {};
-  const symbolsRaw = env.SYMBOLS || process.env.SYMBOLS || env.SYMBOL || process.env.SYMBOL || "HYPEUSDT";
-  res.json({
-    symbols: symbolsRaw.split(",").map(s => s.trim()).filter(Boolean),
-    timeframe: env.TIMEFRAME || process.env.TIMEFRAME || "1H",
-    portfolioValue: env.PORTFOLIO_VALUE_USD || process.env.PORTFOLIO_VALUE_USD || "500",
-    maxTradeSize: env.MAX_TRADE_SIZE_USD || process.env.MAX_TRADE_SIZE_USD || "100",
-    maxTradesPerDay: env.MAX_TRADES_PER_DAY || process.env.MAX_TRADES_PER_DAY || "1000",
-    paperTrading: (env.PAPER_TRADING || process.env.PAPER_TRADING) !== "false",
-    cloudMode: !fs.existsSync(ENV_PATH),
-  });
+  res.json({ ...memSettings, cloudMode: !fs.existsSync(ENV_PATH) });
 });
 
 // ─── API: save settings ──────────────────────────────────────────────────────
 app.post("/api/settings", (req, res) => {
   const { symbols, timeframe, portfolioValue, maxTradeSize, maxTradesPerDay, paperTrading } = req.body;
-  const updates = {
-    SYMBOLS: Array.isArray(symbols) ? symbols.join(",") : symbols,
-    TIMEFRAME: timeframe,
-    PORTFOLIO_VALUE_USD: portfolioValue,
-    MAX_TRADE_SIZE_USD: maxTradeSize,
-    MAX_TRADES_PER_DAY: maxTradesPerDay,
-    PAPER_TRADING: paperTrading ? "true" : "false",
+
+  // Update in-memory store (works on Railway and local)
+  memSettings = {
+    symbols: Array.isArray(symbols) ? symbols : [symbols],
+    timeframe,
+    portfolioValue,
+    maxTradeSize,
+    maxTradesPerDay,
+    paperTrading: !!paperTrading,
   };
 
-  if (fs.existsSync(ENV_PATH)) writeEnv(updates);
+  // Also persist to .env if running locally
+  if (fs.existsSync(ENV_PATH)) {
+    writeEnv({
+      SYMBOLS: memSettings.symbols.join(","),
+      TIMEFRAME: timeframe,
+      PORTFOLIO_VALUE_USD: portfolioValue,
+      MAX_TRADE_SIZE_USD: maxTradeSize,
+      MAX_TRADES_PER_DAY: maxTradesPerDay,
+      PAPER_TRADING: paperTrading ? "true" : "false",
+    });
+  }
 
   res.json({ success: true });
 });
@@ -111,7 +119,18 @@ app.post("/api/run", (req, res) => {
   if (botRunning) return res.json({ success: false, message: "Bot already running" });
   botOutput = [];
   botRunning = true;
-  const child = spawn("node", ["bot.js"], { cwd: __dirname });
+  const child = spawn("node", ["bot.js"], {
+    cwd: __dirname,
+    env: {
+      ...process.env,
+      SYMBOLS: memSettings.symbols.join(","),
+      TIMEFRAME: memSettings.timeframe,
+      PORTFOLIO_VALUE_USD: String(memSettings.portfolioValue),
+      MAX_TRADE_SIZE_USD: String(memSettings.maxTradeSize),
+      MAX_TRADES_PER_DAY: String(memSettings.maxTradesPerDay),
+      PAPER_TRADING: memSettings.paperTrading ? "true" : "false",
+    },
+  });
   child.stdout.on("data", d => botOutput.push(d.toString()));
   child.stderr.on("data", d => botOutput.push(d.toString()));
   child.on("close", () => { botRunning = false; });
