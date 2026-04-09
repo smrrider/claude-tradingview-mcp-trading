@@ -1,50 +1,76 @@
 {
-  "watchlist": ["BTCUSDT"],
-  "default_timeframe": "1m",
+  "watchlist": ["PIONEX:HYPEUSDT.P"],
+  "default_timeframe": "240",
 
   "strategy": {
-    "name": "VWAP + RSI(3) + EMA(8) Scalping Strategy",
-    "sources": ["Lewis Jackson"],
-    "description": "Three indicators, each doing a different job. EMA(8) for trend direction, VWAP for session bias, RSI(3) for entry timing. All three must align before a trade fires."
+    "name": "Market Sentinel — 5-Layer Institutional Entry Framework",
+    "asset": "HYPE (Hyperliquid perpetual)",
+    "description": "5-layer confluence system. All layers must pass before a trade fires. Derived from live Market Sentinel analysis on HYPEUSDT.P. Long bias only — short setup invalid at time of analysis."
   },
 
   "indicators": {
-    "ema_8": "Trend direction. Price above EMA(8) = bullish momentum. Below = bearish.",
-    "vwap": "Session bias. Price above VWAP = buyers in control. Below = sellers. Resets at midnight UTC.",
-    "rsi_3": "Entry timing. RSI on 3 candles only — extremely sensitive. Below 30 in an uptrend = snap-back setup. Above 70 in a downtrend = reversal likely."
-  },
-
-  "bias_criteria": {
-    "bullish": ["Price is above VWAP", "Price is above EMA(8)"],
-    "bearish": ["Price is below VWAP", "Price is below EMA(8)"]
+    "adx": "Trend strength gatekeeper. ADX must be >= 25 for any entry. Below 25 = no trade regardless of other signals.",
+    "ichimoku": "Macro bias filter. Price must be above cloud (Span A + Span B) for longs. TK Cross (Tenkan > Kijun) must be bullish.",
+    "ema_20": "Trend direction. Price must be above EMA(20) and slope must be upward for longs.",
+    "stoch_rsi": "Entry trigger. 1H K line must cross above D line inside the entry zone.",
+    "usdt_dominance": "Macro environment. USDT.D must be falling for risk-on long entries.",
+    "volume": "Confirmation. Entry bar volume must be >= 1.5x the recent average."
   },
 
   "entry_rules": {
     "long": [
-      "Price is above VWAP — buyers in control for the session",
-      "Price is above EMA(8) — uptrend confirmed",
-      "RSI(3) has dropped below 30 — short-term pullback in an uptrend, snap-back likely"
+      "LAYER 1 — ADX (4H) >= 25: trend has sufficient velocity to trade",
+      "LAYER 1 — Price is above 4H Ichimoku Cloud (Span A AND Span B)",
+      "LAYER 1 — 4H TK Cross is bullish: Tenkan > Kijun",
+      "LAYER 1 — Price is above 4H EMA(20) and EMA slope is upward",
+      "LAYER 1 — USDT.D is falling or flat (risk-on macro environment)",
+      "LAYER 2 — 1H structure is printing Higher Highs and Higher Lows",
+      "LAYER 2 — Price has NOT closed below 4H Kijun ($37.11 reference)",
+      "LAYER 3 — Price is inside the entry zone $37.07–$37.73 (Kijun + cloud top cluster)",
+      "LAYER 4 — 1H Stochastic RSI K line crosses above D line inside the entry zone",
+      "LAYER 5 — Entry bar volume is >= 1.5x the recent average volume"
     ],
     "short": [
-      "Price is below VWAP — sellers in control",
-      "Price is below EMA(8) — downtrend confirmed",
-      "RSI(3) has spiked above 70 — overbought in a downtrend, reversal likely"
+      "SHORT SETUP INVALID — 4H TK cross is bullish, EMA above price, USDT.D falling",
+      "Do not short HYPE until: TK cross turns bearish AND price breaks below cloud AND ADX >= 25 in bear direction"
     ]
   },
 
   "exit_rules": [
-    "Exit when RSI(3) crosses back above 50 (for longs) or below 50 (for shorts)",
-    "Hard stop: 0.3% below entry for longs, 0.3% above entry for shorts",
-    "Take profit at next VWAP touch or EMA(8) cross"
+    "Target 1 (50% of position): $39.50 — R:R 2.1:1",
+    "Target 2 (50% of position): $41.50 — R:R 3.4:1",
+    "Hard stop: $36.40 (below cloud and structure)",
+    "Invalidation exit: 4H candle closes below $37.07 (Kijun) — exit immediately",
+    "Invalidation exit: 1H market structure break to the downside confirmed"
   ],
 
   "risk_rules": [
+    "ADX < 25 = NO ENTRY. This is a hard rule, not a guideline.",
+    "Price inside Ichimoku Cloud = REDUCED SIZE only (not full position)",
     "Risk maximum 1% of portfolio per trade",
     "Maximum trade size capped by MAX_TRADE_SIZE_USD in .env",
     "Maximum trades per day capped by MAX_TRADES_PER_DAY in .env",
-    "Do not trade if price is more than 1.5% away from VWAP — overextended",
-    "Paper trade first — validate this strategy on your specific asset before going live"
+    "Catalyst risk within 24 hours = skip the trade, wait for resolution",
+    "Minimum R:R of 2:1 required before any entry is valid",
+    "Paper trade first — validate live before switching PAPER_TRADING=false"
   ],
 
-  "notes": "Scalping strategy — designed for 1m to 5m timeframes. RSI(3) is intentionally fast and sensitive. Do not apply to higher timeframes."
+  "key_levels": {
+    "entry_zone_low": 37.07,
+    "entry_zone_high": 37.73,
+    "stop_loss": 36.40,
+    "target_1": 39.50,
+    "target_2": 41.50,
+    "kijun_4h": 37.11,
+    "cloud_span_a": 37.07,
+    "cloud_span_b": 39.09,
+    "ema_20_4h": 37.67
+  },
+
+  "sentiment_filters": {
+    "funding_rate_max_long": 0.05,
+    "note": "If funding rate exceeds 0.05% (crowded long), skip or reduce size"
+  },
+
+  "notes": "Strategy derived from live Market Sentinel 5-layer analysis on HYPE (2026-04-09). Long bias confirmed. Short setup invalid. Watch for pullback to $37.07–$37.73 entry zone with 1H Stoch RSI K>D cross as trigger. ADX 25.2 is borderline — use reduced position size until ADX > 28."
 }
