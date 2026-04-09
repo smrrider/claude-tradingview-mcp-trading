@@ -59,8 +59,9 @@ app.get("/api/settings", (req, res) => {
 // ─── Railway API — update bot service variables ───────────────────────────────
 async function updateRailwayVars(updates) {
   const token = process.env.RAILWAY_TOKEN;
-  const serviceId = process.env.RAILWAY_BOT_SERVICE_ID || "23bfdd71-ffc4-423a-af14-eb1e42234c41";
+  const serviceId = process.env.RAILWAY_BOT_SERVICE_ID || "7f0432b1-3609-4db1-8bcf-43d487a0ab5e";
   const projectId = process.env.RAILWAY_PROJECT_ID || "28e67e75-d6d1-4501-8e29-d6ec68969699";
+  const environmentId = process.env.RAILWAY_BOT_ENVIRONMENT_ID || "23bfdd71-ffc4-423a-af14-eb1e42234c41";
   if (!token) return { success: false, reason: "No RAILWAY_TOKEN set" };
 
   // Build variables upsert array
@@ -74,7 +75,7 @@ async function updateRailwayVars(updates) {
   const input = {
     projectId,
     serviceId,
-    environmentId: process.env.RAILWAY_BOT_ENVIRONMENT_ID || "",
+    environmentId,
     variables: Object.fromEntries(Object.entries(updates)),
   };
 
