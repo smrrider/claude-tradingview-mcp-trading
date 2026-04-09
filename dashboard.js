@@ -70,48 +70,8 @@ app.get("/api/settings", (req, res) => {
   });
 });
 
-// ─── Railway API — update bot service variables ───────────────────────────────
-async function updateRailwayVars(updates) {
-  const token = process.env.RAILWAY_TOKEN;
-  const serviceId = process.env.RAILWAY_BOT_SERVICE_ID || "7f0432b1-3609-4db1-8bcf-43d487a0ab5e";
-  const projectId = process.env.RAILWAY_PROJECT_ID || "28e67e75-d6d1-4501-8e29-d6ec68969699";
-  const environmentId = process.env.RAILWAY_BOT_ENVIRONMENT_ID || "23bfdd71-ffc4-423a-af14-eb1e42234c41";
-  if (!token) return { success: false, reason: "No RAILWAY_TOKEN set" };
-
-  // Build variables upsert array
-  const variables = Object.entries(updates).map(([name, value]) => ({ name, value }));
-
-  const query = `
-    mutation variableCollectionUpsert($input: VariableCollectionUpsertInput!) {
-      variableCollectionUpsert(input: $input)
-    }
-  `;
-  const input = {
-    projectId,
-    serviceId,
-    environmentId,
-    variables: Object.fromEntries(Object.entries(updates)),
-  };
-
-  try {
-    const r = await fetch("https://backboard.railway.app/graphql/v2", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, variables: { input } }),
-    });
-    const json = await r.json();
-    if (json.errors) return { success: false, reason: json.errors[0].message };
-    return { success: true };
-  } catch (e) {
-    return { success: false, reason: e.message };
-  }
-}
-
 // ─── API: save settings ──────────────────────────────────────────────────────
-app.post("/api/settings", async (req, res) => {
+app.post("/api/settings", (req, res) => {
   const { symbols, timeframe, portfolioValue, maxTradeSize, maxTradesPerDay, paperTrading } = req.body;
   const updates = {
     SYMBOLS: Array.isArray(symbols) ? symbols.join(",") : symbols,
@@ -122,16 +82,9 @@ app.post("/api/settings", async (req, res) => {
     PAPER_TRADING: paperTrading ? "true" : "false",
   };
 
-  // Save to local .env
   if (fs.existsSync(ENV_PATH)) writeEnv(updates);
 
-  // Push to Railway bot service if token is available
-  const railwayResult = await updateRailwayVars(updates);
-
-  res.json({
-    success: true,
-    railway: railwayResult,
-  });
+  res.json({ success: true });
 });
 
 // ─── Webhook — receive results from Railway bot ──────────────────────────────
