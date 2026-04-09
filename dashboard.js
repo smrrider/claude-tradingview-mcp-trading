@@ -68,6 +68,22 @@ app.post("/api/settings", (req, res) => {
   res.json({ success: true });
 });
 
+// ─── Webhook — receive results from Railway bot ──────────────────────────────
+let remoteRuns = [];
+
+app.post("/api/webhook", (req, res) => {
+  const entry = req.body;
+  if (entry && entry.timestamp) {
+    remoteRuns.unshift(entry); // newest first
+    if (remoteRuns.length > 100) remoteRuns.pop(); // cap at 100
+  }
+  res.json({ received: true });
+});
+
+app.get("/api/remote-runs", (req, res) => {
+  res.json(remoteRuns.slice(0, 20));
+});
+
 // ─── API: run bot now ─────────────────────────────────────────────────────────
 let botOutput = [];
 let botRunning = false;
@@ -214,9 +230,17 @@ app.get("/", (req, res) => {
 
   <!-- Recent Trades -->
   <div class="card full-width">
-    <h2>Recent Decisions</h2>
+    <h2>Recent Decisions (Local)</h2>
     <div id="tradesTable">
       <p style="color:#64748b;font-size:13px">No trades logged yet.</p>
+    </div>
+  </div>
+
+  <!-- Railway Runs -->
+  <div class="card full-width">
+    <h2>Railway Runs <span style="font-size:11px;color:#64748b;font-weight:400;margin-left:8px">live from cloud — updates each hour</span></h2>
+    <div id="remoteRuns">
+      <p style="color:#64748b;font-size:13px">No Railway runs received yet. Set WEBHOOK_URL in Railway Variables to enable.</p>
     </div>
   </div>
 
@@ -321,6 +345,40 @@ async function loadTrades() {
     trades.map(t => '<tr>' + cols.map(c => '<td>' + (t[c] || '—') + '</td>').join('') + '</tr>').join('') +
     '</tbody></table>';
 }
+
+async function loadRemoteRuns() {
+  const r = await fetch('/api/remote-runs');
+  const runs = await r.json();
+  const container = document.getElementById('remoteRuns');
+  if (!runs.length) return;
+  container.innerHTML = '<table><thead><tr>' +
+    '<th>Time</th><th>Symbol</th><th>Price</th><th>EMA(8)</th><th>RSI(3)</th><th>Decision</th><th>Source</th>' +
+    '</tr></thead><tbody>' +
+    runs.map(r => {
+      const time = new Date(r.timestamp).toLocaleTimeString();
+      const date = new Date(r.timestamp).toLocaleDateString();
+      const decision = r.allPass
+        ? '<span class="badge badge-live">TRADE</span>'
+        : '<span class="badge badge-blocked">BLOCKED</span>';
+      const source = r.paperTrading
+        ? '<span class="badge badge-paper">PAPER</span>'
+        : '<span class="badge badge-live">LIVE</span>';
+      return '<tr>' +
+        '<td>' + date + ' ' + time + '</td>' +
+        '<td>' + r.symbol + '</td>' +
+        '<td>$' + (r.price || 0).toFixed(2) + '</td>' +
+        '<td>$' + (r.indicators?.ema8 || 0).toFixed(2) + '</td>' +
+        '<td>' + (r.indicators?.rsi3 || 0).toFixed(2) + '</td>' +
+        '<td>' + decision + '</td>' +
+        '<td>' + source + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+// Poll remote runs every 60 seconds
+loadRemoteRuns();
+setInterval(loadRemoteRuns, 60000);
 
 loadSettings();
 loadTrades();

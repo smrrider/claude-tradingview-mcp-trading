@@ -469,6 +469,20 @@ function generateTaxSummary() {
   console.log("─────────────────────────────────────────────────────────\n");
 }
 
+// ─── Webhook — POST results to dashboard ─────────────────────────────────────
+
+async function postWebhook(entry) {
+  const url = process.env.WEBHOOK_URL;
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry),
+    });
+  } catch (_) {}
+}
+
 // ─── Per-symbol run ──────────────────────────────────────────────────────────
 
 async function runForSymbol(symbol, rules, log) {
@@ -479,12 +493,12 @@ async function runForSymbol(symbol, rules, log) {
   const candles = await fetchCandles(symbol, CONFIG.timeframe, 500);
   const closes = candles.map((c) => c.close);
   const price = closes[closes.length - 1];
-  console.log(`\n  Current price: $${price.toFixed(2)}`);
 
   const ema8 = calcEMA(closes, 8);
   const vwap = calcVWAP(candles);
   const rsi3 = calcRSI(closes, 3);
 
+  console.log(`\n  Current price: $${price.toFixed(2)}`);
   console.log(`  EMA(8):  $${ema8.toFixed(2)}`);
   console.log(`  VWAP:    $${vwap ? vwap.toFixed(2) : "N/A"}`);
   console.log(`  RSI(3):  ${rsi3 ? rsi3.toFixed(2) : "N/A"}`);
@@ -496,8 +510,6 @@ async function runForSymbol(symbol, rules, log) {
 
   const { results, allPass } = runSafetyCheck(price, ema8, vwap, rsi3, rules);
   const tradeSize = CONFIG.maxTradeSizeUSD;
-
-  console.log("\n── Decision ─────────────────────────────────────────────\n");
 
   const logEntry = {
     timestamp: new Date().toISOString(),
@@ -518,16 +530,22 @@ async function runForSymbol(symbol, rules, log) {
     },
   };
 
+  console.log("\n── Safety Check ─────────────────────────────────────────\n");
+  results.forEach((r) => {
+    console.log(`  ${r.pass ? "✅" : "🚫"} ${r.label}`);
+    if (r.required !== undefined) console.log(`     Required: ${r.required} | Actual: ${r.actual}`);
+  });
+
+  console.log("\n── Decision ─────────────────────────────────────────────\n");
+
   if (!allPass) {
     const failed = results.filter((r) => !r.pass).map((r) => r.label);
     console.log(`🚫 TRADE BLOCKED`);
-    console.log(`   Failed conditions:`);
     failed.forEach((f) => console.log(`   - ${f}`));
   } else {
     console.log(`✅ ALL CONDITIONS MET`);
     if (CONFIG.paperTrading) {
       console.log(`\n📋 PAPER TRADE — would buy ${symbol} ~$${tradeSize.toFixed(2)} at market`);
-      console.log(`   (Set PAPER_TRADING=false in .env to place real orders)`);
       logEntry.orderPlaced = true;
       logEntry.orderId = `PAPER-${Date.now()}`;
     } else {
@@ -546,6 +564,7 @@ async function runForSymbol(symbol, rules, log) {
 
   log.trades.push(logEntry);
   writeTradeCsv(logEntry);
+  await postWebhook(logEntry);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
