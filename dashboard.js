@@ -136,7 +136,7 @@ app.get("/", (req, res) => {
   .btn-run:disabled { background: #374151; color: #64748b; cursor: not-allowed; }
   .status { font-size: 12px; color: #10b981; margin-top: 8px; min-height: 18px; }
   .status.error { color: #f87171; }
-  .output { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 11px; color: #94a3b8; max-height: 200px; overflow-y: auto; white-space: pre-wrap; margin-top: 12px; display: none; }
+  .output { background: #0f1117; border: 1px solid #2d3148; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 11px; color: #94a3b8; max-height: 420px; overflow-y: auto; white-space: pre-wrap; margin-top: 12px; display: none; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
   .badge-paper { background: #1e3a5f; color: #60a5fa; }
   .badge-live { background: #1a2e1a; color: #4ade80; }
@@ -197,14 +197,14 @@ app.get("/", (req, res) => {
   </div>
 
   <!-- Run Bot -->
-  <div class="card">
+  <div class="card full-width">
     <h2>Run Bot</h2>
     <p style="font-size:13px;color:#64748b;margin-bottom:16px;line-height:1.6">
       Manually trigger a bot run. It will fetch live data, check all strategy conditions, and log the decision.
     </p>
-    <button class="btn btn-run" id="runBtn" onclick="runBot()">▶ Run Now</button>
+    <button class="btn btn-run" id="runBtn" onclick="runBot()" style="max-width:200px">▶ Run Now</button>
     <div class="status" id="runStatus"></div>
-    <div class="output" id="runOutput"></div>
+    <div class="output" id="runOutput" style="max-height:700px; min-height:400px; display:block">Waiting for run...</div>
   </div>
 
   <!-- Recent Trades -->
