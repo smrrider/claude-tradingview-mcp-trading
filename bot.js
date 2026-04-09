@@ -506,9 +506,16 @@ async function runForSymbol(symbol, rules, log) {
   console.log(`${"─".repeat(59)}`);
 
   const candles = await fetchCandles(symbol, CONFIG.timeframe, 500);
-  const closes = candles.map((c) => c.close);
-  const price = closes[closes.length - 1];
+  const closes = candles.map((c) => c.close).filter((n) => typeof n === "number" && !isNaN(n));
 
+  console.log(`\n  Candles fetched: ${candles.length} (valid closes: ${closes.length})`);
+
+  if (closes.length < 20) {
+    console.log(`\n⚠️  Not enough candle data (got ${closes.length}, need 20). Skipping.`);
+    return;
+  }
+
+  const price = closes[closes.length - 1];
   const ema8 = calcEMA(closes, 8);
   const vwap = calcVWAP(candles);
   const rsi3 = calcRSI(closes, 3);
@@ -516,10 +523,10 @@ async function runForSymbol(symbol, rules, log) {
   console.log(`\n  Current price: $${price.toFixed(2)}`);
   console.log(`  EMA(8):  $${ema8.toFixed(2)}`);
   console.log(`  VWAP:    $${vwap ? vwap.toFixed(2) : "N/A"}`);
-  console.log(`  RSI(3):  ${rsi3 ? rsi3.toFixed(2) : "N/A"}`);
+  console.log(`  RSI(3):  ${rsi3 !== null && !isNaN(rsi3) ? rsi3.toFixed(2) : "N/A"}`);
 
-  if (!vwap || !rsi3) {
-    console.log("\n⚠️  Not enough data to calculate indicators. Skipping.");
+  if (!vwap || rsi3 === null || isNaN(rsi3)) {
+    console.log("\n⚠️  Could not calculate all indicators. Skipping.");
     return;
   }
 
