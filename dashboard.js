@@ -43,8 +43,9 @@ function writeEnv(updates) {
 // ─── API: get current settings ───────────────────────────────────────────────
 app.get("/api/settings", (req, res) => {
   const env = readEnv();
+  const symbolsRaw = env.SYMBOLS || env.SYMBOL || "HYPEUSDT";
   res.json({
-    symbol: env.SYMBOL || "HYPEUSDT",
+    symbols: symbolsRaw.split(",").map(s => s.trim()).filter(Boolean),
     timeframe: env.TIMEFRAME || "1H",
     portfolioValue: env.PORTFOLIO_VALUE_USD || "500",
     maxTradeSize: env.MAX_TRADE_SIZE_USD || "100",
@@ -55,9 +56,9 @@ app.get("/api/settings", (req, res) => {
 
 // ─── API: save settings ──────────────────────────────────────────────────────
 app.post("/api/settings", (req, res) => {
-  const { symbol, timeframe, portfolioValue, maxTradeSize, maxTradesPerDay, paperTrading } = req.body;
+  const { symbols, timeframe, portfolioValue, maxTradeSize, maxTradesPerDay, paperTrading } = req.body;
   writeEnv({
-    SYMBOL: symbol,
+    SYMBOLS: Array.isArray(symbols) ? symbols.join(",") : symbols,
     TIMEFRAME: timeframe,
     PORTFOLIO_VALUE_USD: portfolioValue,
     MAX_TRADE_SIZE_USD: maxTradeSize,
@@ -158,8 +159,12 @@ app.get("/", (req, res) => {
   <div class="card">
     <h2>Bot Settings</h2>
     <div class="field">
-      <label>Symbol</label>
-      <input type="text" id="symbol" placeholder="e.g. HYPEUSDT, BTCUSDT">
+      <label>Symbols (coins to trade)</label>
+      <div id="symbolTags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="symbolInput" placeholder="e.g. BTCUSDT" style="flex:1" onkeydown="if(event.key==='Enter'){addSymbol();event.preventDefault()}">
+        <button onclick="addSymbol()" style="background:#6366f1;color:white;border:none;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600">Add</button>
+      </div>
     </div>
     <div class="field">
       <label>Timeframe</label>
@@ -218,10 +223,36 @@ app.get("/", (req, res) => {
 </div>
 
 <script>
+let currentSymbols = [];
+
+function renderTags() {
+  const container = document.getElementById('symbolTags');
+  container.innerHTML = currentSymbols.map((s, i) =>
+    '<span style="background:#1a1f35;border:1px solid #6366f1;border-radius:20px;padding:4px 10px;font-size:12px;color:#a5b4fc;display:flex;align-items:center;gap:6px">' +
+    s + '<span onclick="removeSymbol(' + i + ')" style="cursor:pointer;color:#64748b;font-size:14px;line-height:1">×</span></span>'
+  ).join('');
+}
+
+function addSymbol() {
+  const input = document.getElementById('symbolInput');
+  const val = input.value.trim().toUpperCase();
+  if (val && !currentSymbols.includes(val)) {
+    currentSymbols.push(val);
+    renderTags();
+  }
+  input.value = '';
+}
+
+function removeSymbol(i) {
+  currentSymbols.splice(i, 1);
+  renderTags();
+}
+
 async function loadSettings() {
   const r = await fetch('/api/settings');
   const s = await r.json();
-  document.getElementById('symbol').value = s.symbol;
+  currentSymbols = s.symbols || ['HYPEUSDT'];
+  renderTags();
   document.getElementById('timeframe').value = s.timeframe;
   document.getElementById('portfolioValue').value = s.portfolioValue;
   document.getElementById('maxTradeSize').value = s.maxTradeSize;
@@ -236,7 +267,7 @@ async function saveSettings() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      symbol: document.getElementById('symbol').value,
+      symbols: currentSymbols,
       timeframe: document.getElementById('timeframe').value,
       portfolioValue: document.getElementById('portfolioValue').value,
       maxTradeSize: document.getElementById('maxTradeSize').value,

@@ -72,8 +72,8 @@ function checkOnboarding() {
 // ─── Config ────────────────────────────────────────────────────────────────
 
 const CONFIG = {
-  symbol: process.env.SYMBOL || "BTCUSDT",
-  timeframe: process.env.TIMEFRAME || "4H",
+  symbols: (process.env.SYMBOLS || process.env.SYMBOL || "HYPEUSDT").split(",").map(s => s.trim()).filter(Boolean),
+  timeframe: process.env.TIMEFRAME || "1H",
   portfolioValue: parseFloat(process.env.PORTFOLIO_VALUE_USD || "1000"),
   maxTradeSizeUSD: parseFloat(process.env.MAX_TRADE_SIZE_USD || "100"),
   maxTradesPerDay: parseInt(process.env.MAX_TRADES_PER_DAY || "3"),
@@ -499,40 +499,18 @@ function generateTaxSummary() {
   console.log("─────────────────────────────────────────────────────────\n");
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// ─── Per-symbol run ──────────────────────────────────────────────────────────
 
-async function run() {
-  checkOnboarding();
-  initCsv();
-  console.log("═══════════════════════════════════════════════════════════");
-  console.log("  Claude Trading Bot");
-  console.log(`  ${new Date().toISOString()}`);
-  console.log(
-    `  Mode: ${CONFIG.paperTrading ? "📋 PAPER TRADING" : "🔴 LIVE TRADING"}`,
-  );
-  console.log("═══════════════════════════════════════════════════════════");
+async function runForSymbol(symbol, rules, log) {
+  console.log(`\n${"─".repeat(59)}`);
+  console.log(`  ${symbol} | Timeframe: ${CONFIG.timeframe}`);
+  console.log(`${"─".repeat(59)}`);
 
-  // Load strategy
-  const rules = JSON.parse(readFileSync("rules.json", "utf8"));
-  console.log(`\nStrategy: ${rules.strategy.name}`);
-  console.log(`Symbol: ${CONFIG.symbol} | Timeframe: ${CONFIG.timeframe}`);
-
-  // Load log and check daily limits
-  const log = loadLog();
-  const withinLimits = checkTradeLimits(log);
-  if (!withinLimits) {
-    console.log("\nBot stopping — trade limits reached for today.");
-    return;
-  }
-
-  // Fetch candle data — need enough for EMA(8) + full session for VWAP
-  console.log("\n── Fetching market data from Binance ───────────────────\n");
-  const candles = await fetchCandles(CONFIG.symbol, CONFIG.timeframe, 500);
+  const candles = await fetchCandles(symbol, CONFIG.timeframe, 500);
   const closes = candles.map((c) => c.close);
   const price = closes[closes.length - 1];
-  console.log(`  Current price: $${price.toFixed(2)}`);
+  console.log(`\n  Current price: $${price.toFixed(2)}`);
 
-  // Calculate indicators
   const ema8 = calcEMA(closes, 8);
   const vwap = calcVWAP(candles);
   const rsi3 = calcRSI(closes, 3);
@@ -542,22 +520,18 @@ async function run() {
   console.log(`  RSI(3):  ${rsi3 ? rsi3.toFixed(2) : "N/A"}`);
 
   if (!vwap || !rsi3) {
-    console.log("\n⚠️  Not enough data to calculate indicators. Exiting.");
+    console.log("\n⚠️  Not enough data to calculate indicators. Skipping.");
     return;
   }
 
-  // Run safety check
   const { results, allPass } = runSafetyCheck(price, ema8, vwap, rsi3, rules);
-
-  // Calculate position size
   const tradeSize = CONFIG.maxTradeSizeUSD;
 
-  // Decision
   console.log("\n── Decision ─────────────────────────────────────────────\n");
 
   const logEntry = {
     timestamp: new Date().toISOString(),
-    symbol: CONFIG.symbol,
+    symbol,
     timeframe: CONFIG.timeframe,
     price,
     indicators: { ema8, vwap, rsi3 },
@@ -581,25 +555,15 @@ async function run() {
     failed.forEach((f) => console.log(`   - ${f}`));
   } else {
     console.log(`✅ ALL CONDITIONS MET`);
-
     if (CONFIG.paperTrading) {
-      console.log(
-        `\n📋 PAPER TRADE — would buy ${CONFIG.symbol} ~$${tradeSize.toFixed(2)} at market`,
-      );
+      console.log(`\n📋 PAPER TRADE — would buy ${symbol} ~$${tradeSize.toFixed(2)} at market`);
       console.log(`   (Set PAPER_TRADING=false in .env to place real orders)`);
       logEntry.orderPlaced = true;
       logEntry.orderId = `PAPER-${Date.now()}`;
     } else {
-      console.log(
-        `\n🔴 PLACING LIVE ORDER — $${tradeSize.toFixed(2)} BUY ${CONFIG.symbol}`,
-      );
+      console.log(`\n🔴 PLACING LIVE ORDER — $${tradeSize.toFixed(2)} BUY ${symbol}`);
       try {
-        const order = await placeBitGetOrder(
-          CONFIG.symbol,
-          "buy",
-          tradeSize,
-          price,
-        );
+        const order = await placeBitGetOrder(symbol, "buy", tradeSize, price);
         logEntry.orderPlaced = true;
         logEntry.orderId = order.orderId;
         console.log(`✅ ORDER PLACED — ${order.orderId}`);
@@ -610,14 +574,38 @@ async function run() {
     }
   }
 
-  // Save decision log
   log.trades.push(logEntry);
+  writeTradeCsv(logEntry);
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+
+async function run() {
+  checkOnboarding();
+  initCsv();
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log("  Claude Trading Bot");
+  console.log(`  ${new Date().toISOString()}`);
+  console.log(`  Mode: ${CONFIG.paperTrading ? "📋 PAPER TRADING" : "🔴 LIVE TRADING"}`);
+  console.log(`  Symbols: ${CONFIG.symbols.join(", ")}`);
+  console.log("═══════════════════════════════════════════════════════════");
+
+  const rules = JSON.parse(readFileSync("rules.json", "utf8"));
+  console.log(`\nStrategy: ${rules.strategy.name}`);
+
+  const log = loadLog();
+  const withinLimits = checkTradeLimits(log);
+  if (!withinLimits) {
+    console.log("\nBot stopping — trade limits reached for today.");
+    return;
+  }
+
+  for (const symbol of CONFIG.symbols) {
+    await runForSymbol(symbol, rules, log);
+  }
+
   saveLog(log);
   console.log(`\nDecision log saved → ${LOG_FILE}`);
-
-  // Write tax CSV row for every run (executed, paper, or blocked)
-  writeTradeCsv(logEntry);
-
   console.log("═══════════════════════════════════════════════════════════\n");
 }
 
