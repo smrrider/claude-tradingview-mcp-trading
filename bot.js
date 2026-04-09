@@ -110,7 +110,7 @@ function countTodaysTrades(log) {
 // ─── Market Data (Binance public API — free, no auth) ───────────────────────
 
 async function fetchCandles(symbol, interval, limit = 100) {
-  // Map our timeframe format to Binance interval format
+  // Map our timeframe format to Hyperliquid interval format
   const intervalMap = {
     "1m": "1m",
     "3m": "3m",
@@ -122,20 +122,31 @@ async function fetchCandles(symbol, interval, limit = 100) {
     "1D": "1d",
     "1W": "1w",
   };
-  const binanceInterval = intervalMap[interval] || "1m";
+  const hlInterval = intervalMap[interval] || "1m";
 
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${limit}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Binance API error: ${res.status}`);
+  // Calculate ms per bar to determine startTime
+  const msMap = { "1m": 60000, "3m": 180000, "5m": 300000, "15m": 900000,
+    "30m": 1800000, "1h": 3600000, "4h": 14400000, "1d": 86400000, "1w": 604800000 };
+  const startTime = Date.now() - (limit + 5) * (msMap[hlInterval] || 60000);
+
+  // Use the coin name (strip USDT suffix)
+  const coin = symbol.replace(/USDT$/, "");
+
+  const res = await fetch("https://api.hyperliquid.xyz/info", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "candleSnapshot", req: { coin, interval: hlInterval, startTime, endTime: Date.now() } }),
+  });
+  if (!res.ok) throw new Error(`Hyperliquid API error: ${res.status}`);
   const data = await res.json();
 
-  return data.map((k) => ({
-    time: k[0],
-    open: parseFloat(k[1]),
-    high: parseFloat(k[2]),
-    low: parseFloat(k[3]),
-    close: parseFloat(k[4]),
-    volume: parseFloat(k[5]),
+  return data.slice(-limit).map((k) => ({
+    time: k.t,
+    open: parseFloat(k.o),
+    high: parseFloat(k.h),
+    low: parseFloat(k.l),
+    close: parseFloat(k.c),
+    volume: parseFloat(k.v),
   }));
 }
 
