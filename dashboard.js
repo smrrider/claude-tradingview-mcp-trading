@@ -42,15 +42,17 @@ function writeEnv(updates) {
 
 // ─── API: get current settings ───────────────────────────────────────────────
 app.get("/api/settings", (req, res) => {
-  const env = readEnv();
-  const symbolsRaw = env.SYMBOLS || env.SYMBOL || "HYPEUSDT";
+  // On Railway, .env doesn't exist — read from injected env vars directly
+  const env = fs.existsSync(ENV_PATH) ? readEnv() : {};
+  const symbolsRaw = env.SYMBOLS || process.env.SYMBOLS || env.SYMBOL || process.env.SYMBOL || "HYPEUSDT";
   res.json({
     symbols: symbolsRaw.split(",").map(s => s.trim()).filter(Boolean),
-    timeframe: env.TIMEFRAME || "1H",
-    portfolioValue: env.PORTFOLIO_VALUE_USD || "500",
-    maxTradeSize: env.MAX_TRADE_SIZE_USD || "100",
-    maxTradesPerDay: env.MAX_TRADES_PER_DAY || "1000",
-    paperTrading: env.PAPER_TRADING !== "false",
+    timeframe: env.TIMEFRAME || process.env.TIMEFRAME || "1H",
+    portfolioValue: env.PORTFOLIO_VALUE_USD || process.env.PORTFOLIO_VALUE_USD || "500",
+    maxTradeSize: env.MAX_TRADE_SIZE_USD || process.env.MAX_TRADE_SIZE_USD || "100",
+    maxTradesPerDay: env.MAX_TRADES_PER_DAY || process.env.MAX_TRADES_PER_DAY || "1000",
+    paperTrading: (env.PAPER_TRADING || process.env.PAPER_TRADING) !== "false",
+    cloudMode: !fs.existsSync(ENV_PATH),
   });
 });
 
@@ -388,7 +390,7 @@ loadTrades();
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
-const PORT = process.env.DASHBOARD_PORT || 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || process.env.DASHBOARD_PORT || 3000;
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`\n✅ Dashboard running at http://localhost:${PORT}\n`);
 });
